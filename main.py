@@ -23,7 +23,10 @@ MAX_FILE_SIZE = 93 * 1024  # 93KB
 @app.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    x_upload_token_1848: str = Header(None)
+    x_upload_token_1848: str = Header(
+        ...,  # Required header
+        alias="X-Upload-Token-1848"  # Exact header name expected
+    )
 ):
     # 🔐 1️⃣ Authentication
     if x_upload_token_1848 != EXPECTED_TOKEN:
@@ -39,12 +42,11 @@ async def upload_file(
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large")
 
-    # If CSV → process it
+    # 📊 4️⃣ Process CSV
     if extension == ".csv":
         try:
             df = pd.read_csv(io.BytesIO(contents))
 
-            # Basic validation
             required_columns = {"id", "name", "value", "category"}
             if not required_columns.issubset(set(df.columns)):
                 raise HTTPException(status_code=400, detail="Missing required columns")
@@ -64,4 +66,5 @@ async def upload_file(
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid CSV content")
 
+    # For .json and .txt (just validate)
     return {"message": "File validated successfully"}
