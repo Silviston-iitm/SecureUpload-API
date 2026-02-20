@@ -1,12 +1,13 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import pandas as pd
-from pathlib import Path
+from fastapi.responses import JSONResponse
+import csv
 import io
+import os
 
 app = FastAPI()
 
-# Enable CORS for POST requests from any origin
+# Enable CORS for all origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,57 +15,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Constants
-EXPECTED_TOKEN = "84y69useinziis0"
+VALID_TOKEN = "6johsr3kr8z9t3tq"
+MAX_SIZE = 52 * 1024  # 52KB
 ALLOWED_EXTENSIONS = {".csv", ".json", ".txt"}
-MAX_FILE_SIZE = 93 * 1024  # 93KB
 
 
 @app.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    x_upload_token_1848: str = Header(
-        ...,  # Required header
-        alias="X-Upload-Token-1848"  # Exact header name expected
-    )
+    x_upload_token_7844: str = Header(None),
 ):
-    # 🔐 1️⃣ Authentication
-    if x_upload_token_1848 != EXPECTED_TOKEN:
+    # 1️⃣ Authentication
+    if not x_upload_token_7844 or x_upload_token_7844 != VALID_TOKEN:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # 📄 2️⃣ Validate file extension
-    extension = Path(file.filename).suffix.lower()
-    if extension not in ALLOWED_EXTENSIONS:
+    # 2️⃣ File type validation
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Invalid file type")
 
-    # 📦 3️⃣ Validate file size
+    # 3️⃣ File size validation
     contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE:
+    if len(contents) > MAX_SIZE:
         raise HTTPException(status_code=413, detail="File too large")
 
-    # 📊 4️⃣ Process CSV
-    if extension == ".csv":
-        try:
-            df = pd.read_csv(io.BytesIO(contents))
+    # 4️⃣ Process CSV only
+    if ext == ".csv":
+        text = contents.decode("utf-8")
+        reader = csv.DictReader(io.StringIO(text))
+        rows = list(reader)
 
-            required_columns = {"id", "name", "value", "category"}
-            if not required_columns.issubset(set(df.columns)):
-                raise HTTPException(status_code=400, detail="Missing required columns")
+        columns = list(rows[0].keys()) if rows else []
+        total_value = 0.0
+        category_counts = {}
 
-            total_value = float(df["value"].sum())
-            category_counts = df["category"].value_counts().to_dict()
+        for row in rows:
+            if "value" in row:
+                total_value += float(row["value"])
+            if "category" in row:
+                cat = row["category"]
+                category_counts[cat] = category_counts.get(cat, 0) + 1
 
-            return {
-                "email": "24f1002710@ds.study.iitm.ac.in",
-                "filename": file.filename,
-                "rows": len(df),
-                "columns": list(df.columns),
-                "totalValue": total_value,
-                "categoryCounts": category_counts,
-            }
+        return JSONResponse({
+            "filename": filename,
+            "rows": len(rows),
+            "columns": columns,
+            "totalValue": round(total_value, 2),
+            "categoryCounts": category_counts,
+        })
 
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid CSV content")
+    # For json/txt (just accept)
+    return JSONResponse({
+        "filename": filename,
+        "message": "File validated successfully"
+    })
 
-    # For .json and .txt (just validate)
-    return {"message": "File validated successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
