@@ -21,7 +21,7 @@ async def add_cors_headers(request, call_next):
     response.headers["Access-Control-Allow-Private-Network"] = "true"
     return response
 
-VALID_TOKEN = "6johsr3kr8z9t3tq"
+VALID_TOKEN = "84y69useuinziis0"
 MAX_SIZE = 52 * 1024  # 52KB
 ALLOWED_EXTENSIONS = {".csv", ".json", ".txt"}
 
